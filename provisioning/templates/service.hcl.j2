@@ -1,0 +1,16 @@
+service {
+  name = "{{ ansible_hostname }}"
+  port = 8080
+
+  connect {
+    sidecar_service {}
+  }
+
+  check {
+    id       = "{{ ansible_hostname }}-check"
+    http     = "http://localhost:8080"
+    method   = "GET"
+    interval = "1s"
+    timeout  = "1s"
+  }
+}

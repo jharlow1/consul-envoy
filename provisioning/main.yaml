@@ -1,0 +1,117 @@
+---
+- hosts: all
+
+  tasks:
+    - name: "Build hosts file"
+      lineinfile: dest=/etc/hosts regexp='.*{{ item }}$' line="{{ hostvars[item].ip_address }} {{item}} {{item}}.envoydemo" state=present
+      when: hostvars[item].ip_address is defined
+      with_items: " {{ groups['all'] }}"
+
+    - name: "Install envoy repository"
+      yum_repository:
+        name: Envoy
+        description: GetEnvoy Yum Repository
+        baseurl: https://tetrate.bintray.com/getenvoy-rpm/centos/$releasever/$basearch/stable/
+        gpgkey: https://getenvoy.io/gpg
+
+    - name: "Install consul repository"
+      yum_repository:
+        name: Consul
+        description: Consul Yum Repository
+        baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+        gpgkey: https://rpm.releases.hashicorp.com/gpg
+
+    - name: "Install consul"
+      yum:
+        name: consul
+        state: present
+
+    - name: "Install envoy"
+      yum:
+        name: getenvoy-envoy-1.14.4.p0.g923c411-1p67.g2aa564b
+        allow_downgrade: yes
+        state: present
+
+    - name: "Configure consul"
+      template:
+        src: templates/consul.hcl.j2
+        dest: /etc/consul.d/consul.hcl
+        mode: 0644
+      notify:
+        - reload_consul
+
+    - name: "Start consul"
+      service:
+        name: consul
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: reload_consul
+      service:
+        name: consul
+        state: reloaded
+
+- hosts: service
+
+  vars:
+    webroot: "/usr/share/nginx/html"
+
+  vars_files:
+    - vars/main.yaml
+
+  collections:
+    - nginxinc.nginx_core
+
+  handlers:
+    - name: reload_consul
+      service:
+        name: consul
+        state: reloaded
+
+  roles:
+    - role: nginx
+    - role: nginx_config
+      vars:
+        nginx_config_http_template_enable: true
+        nginx_config_http_template:
+          app:
+            template_file: http/default.conf.j2
+            conf_file_name: default.conf
+            conf_file_location: /etc/nginx/conf.d/
+            servers:
+              server1:
+                listen:
+                  listen_localhost:
+                    port: 8080
+                server_name: "{{ ansible_hostname }}"
+                access_log:
+                  - name: main
+                    location: /var/log/nginx/access.log
+                web_server:
+                  locations:
+                    main_site:
+                      location: /
+                      html_file_location: "{{ webroot }}"
+                      html_file_name: index.html
+  tasks:
+    - name: Ensure http root exists
+      file:
+        path: "{{ webroot }}"
+        state: directory
+
+    - name: Put index file in place
+      template:
+        src: templates/index.html.j2
+        dest: "{{ webroot }}/index.html"
+        mode: 0755
+
+    - name: Register service with consul
+      template:
+        src: templates/service.hcl.j2
+        dest: /etc/consul.d/service.hcl
+        mode: 0644
+      notify:
+        - reload_consul
+
+

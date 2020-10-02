@@ -1,0 +1,22 @@
+{% raw %}
+datacenter = "envoydemo"
+data_dir = "/opt/consul"
+client_addr = "0.0.0.0"
+bind_addr = "{{ GetInterfaceIP \"eth1\" }}"
+ui = true
+{% endraw %}
+{% if ansible_hostname == 'consul' -%}
+server = true
+bootstrap_expect = 1 
+
+connect {
+  enabled = true
+}
+{% else -%}
+server = false
+retry_join = ["consul.envoydemo"]
+{% endif %}
+
+ports {
+  "grpc" = 8502
+}
