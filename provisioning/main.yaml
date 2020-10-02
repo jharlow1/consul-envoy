@@ -114,4 +114,8 @@
       notify:
         - reload_consul
 
-
+    - name: start sidecar
+      shell: |
+        consul connect envoy -sidecar-for {{ ansible_hostname }} -admin-bind localhost:19001 > /var/log/{{ ansible_hostname }}.log 2>&1
+      async: 45
+      poll: 0
